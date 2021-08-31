@@ -1,43 +1,43 @@
 #include "porter.h"
 
-uint8_t porter_init(porter_t *desc, const uint8_t package_length, const uint8_t buff_length) //dynamic
+uint8_t porter_init(porter_t *porter, const uint8_t package_length, const uint8_t buff_length) //dynamic
 {
-    if (desc != NULL) {
+    if (porter != NULL) {
         if (package_length > 0 && buff_length > 0) {
-            desc->buff_length = buff_length;
-            desc->package_length = package_length;
+            porter->buff_length = buff_length;
+            porter->package_length = package_length;
 
-            desc->tx_buff = (uint8_t**)malloc(buff_length * sizeof(uint8_t*));
-            if (desc->tx_buff == NULL) {
+            porter->tx_buff = (uint8_t**)malloc(buff_length * sizeof(uint8_t*));
+            if (porter->tx_buff == NULL) {
                 return PORTER_ERROR;
             }
 
             for (uint8_t i = 0; i < buff_length; ++i) {
-                desc->tx_buff[i] = (uint8_t*)malloc(package_length * sizeof(uint8_t));
+                porter->tx_buff[i] = (uint8_t*)malloc(package_length * sizeof(uint8_t));
 
-                if (desc->tx_buff[i] == NULL) {
+                if (porter->tx_buff[i] == NULL) {
                     return PORTER_ERROR;
                 }
 
                 for (uint8_t j = 0; j < package_length; ++j) {
-                    desc->tx_buff[i][j] = i;
+                    porter->tx_buff[i][j] = i;
                 }
             }
 
-            desc->rx_buff = (uint8_t**)malloc(buff_length * sizeof(uint8_t*));
-            if (desc->rx_buff == NULL) {
+            porter->rx_buff = (uint8_t**)malloc(buff_length * sizeof(uint8_t*));
+            if (porter->rx_buff == NULL) {
                 return PORTER_ERROR;
             }
 
             for (uint8_t i = 0; i < buff_length; ++i) {
-                desc->rx_buff[i] = (uint8_t*)malloc(package_length * sizeof(uint8_t));
+                porter->rx_buff[i] = (uint8_t*)malloc(package_length * sizeof(uint8_t));
 
-                if (desc->rx_buff[i] == NULL) {
+                if (porter->rx_buff[i] == NULL) {
                     return PORTER_ERROR;
                 }
 
                 for (uint8_t j = 0; j < package_length; ++j) {
-                    desc->rx_buff[i][j] = i;
+                    porter->rx_buff[i][j] = i;
                 }
             }
 
@@ -48,25 +48,38 @@ uint8_t porter_init(porter_t *desc, const uint8_t package_length, const uint8_t 
     return PORTER_ERROR;
 }
 
-uint8_t porter_deinit(porter_t *desc)
+uint8_t porter_deinit(porter_t *porter)
 {
-    if (desc != NULL) {
-        if (desc->tx_buff != NULL) {
-            for (uint8_t i = 0; i < desc->buff_length; ++i) {
-                free(desc->tx_buff[i]);
+    if (porter != NULL) {
+        if (porter->tx_buff != NULL) {
+            for (uint8_t i = 0; i < porter->buff_length; ++i) {
+                free(porter->tx_buff[i]);
             }
-            free(desc->tx_buff);
+            free(porter->tx_buff);
         }
 
-        if (desc->rx_buff != NULL) {
-            for (uint8_t i = 0; i < desc->buff_length; ++i) {
-                free(desc->rx_buff[i]);
+        if (porter->rx_buff != NULL) {
+            for (uint8_t i = 0; i < porter->buff_length; ++i) {
+                free(porter->rx_buff[i]);
             }
-            free(desc->rx_buff);
+            free(porter->rx_buff);
         }
 
         return PORTER_OK;
     }
 
     return PORTER_ERROR;
+}
+
+uint8_t porter_write(porter_t *porter, const uint8_t *data, const uint8_t length)
+{
+    if (porter != NULL) {
+        if (data != NULL && length > 0) {
+            if (length <= porter->package_length) {
+                //влезит в одну ячейку
+            } else {
+                //нужно разбивать по ячейкам
+            }
+        }
+    }
 }
