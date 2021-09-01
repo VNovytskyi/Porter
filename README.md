@@ -7,6 +7,10 @@ Library to guarantee data delivery
 
 ## Overview
 The library was created to organize the guarantee of data delivery over the data transmission channel. The library works in sequential mode (does not support waterfalls) and has no internal FIFO buffers.
+<p align="center">
+  <img src="Schemes/Schema1.PNG">
+</p>
+
 ## How to use
 #### Init Porter
 ```c
@@ -118,5 +122,3 @@ uint8_t porter_is_tx_free(porter_t *porter)
  */
 uint8_t porter_set_tx_free_callback(porter_t *porter, void (*tx_free_callback)())
 ```
-
-## Internal logic
