@@ -50,3 +50,71 @@ porter_deinit(&porter);
 ```
 
 ## Functions description
+```c
+/*!
+ * \brief porter_init Set initial values
+ * \param porter - address of sheller descriptor
+ * \param max_data_length - maximum length of transmitted data
+ * \param send_callback - function that is called when a message is sent
+ * \param recv_callback - function that is called when a message is received
+ * \param timeout_ms - time for which acknowledgement should come
+ * \return result of init porter
+ */
+uint8_t porter_init(porter_t *porter,
+                    uint8_t max_data_length,
+                    void (*send_callback)(const uint8_t *data, const uint8_t data_length),
+                    void (*recv_callback)(const uint8_t *data, const uint8_t data_length),
+                    porter_time_t timeout_ms);
+```
+
+```c
+/*!
+ * \brief porter_deinit Free memory
+ * \param porter - address of sheller descriptor
+ * \return
+ */
+uint8_t porter_deinit(porter_t *porter);
+```
+
+```c
+/*!
+ * \brief porter_send Push data to an internal buffer to send later
+ * \param porter - address of sheller descriptor
+ * \param data - pointer to user data which need to send
+ * \param data_length - length of user data
+ * \return result of pushing data to an internal buffer
+ */
+uint8_t porter_send(porter_t *porter, const uint8_t *data, const uint8_t data_length)
+```
+
+```c
+/*!
+ * \brief porter_process Proceed work of Porter
+ * \param porter - address of sheller descriptor
+ * \param received_data - pointer on received data
+ * \param received_data_length - length of received data
+ * \param current_time - current system time in ms
+ * \return result of proceed work
+ * \details this function call callbacks: tx_free_callback, send_callback, recv_callback
+ */
+uint8_t porter_process(porter_t *porter, const uint8_t *received_data, const uint8_t received_data_length, porter_time_t current_time)
+```
+
+```c
+/*!
+ * \brief porter_is_tx_free
+ * \param porter - address of sheller descriptor
+ * \return tx buffer status
+ * \details compare the return value with PORTER_TX_BUSY or PORTER_TX_FREE
+ */
+uint8_t porter_is_tx_free(porter_t *porter)
+```
+
+```c
+/*!
+ * \brief porter_set_tx_free_callback
+ * \param porter - address of sheller descriptor
+ * \return status of set callback
+ */
+uint8_t porter_set_tx_free_callback(porter_t *porter, void (*tx_free_callback)())
+```
