@@ -122,3 +122,6 @@ uint8_t porter_is_tx_free(porter_t *porter)
  */
 uint8_t porter_set_tx_free_callback(porter_t *porter, void (*tx_free_callback)())
 ```
+
+## Tests
+You can run the tests for Porter to make sure it works: [BaseTest_Porter](https://github.com/VNovytskyi/BaseTest_Porter)
