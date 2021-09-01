@@ -32,25 +32,24 @@ typedef struct {
     porter_time_t send_time;
     porter_time_t timeout_ms;
 
-    void (*send_callback)(uint8_t *data, uint8_t data_length);
-    void (*recv_callback)(uint8_t *data, uint8_t data_length);
+    void (*send_callback)(const uint8_t *data, const uint8_t data_length);
+    void (*recv_callback)(const uint8_t *data, const uint8_t data_length);
     void (*tx_free_callback)();
 
 } porter_t;
 
 uint8_t porter_init(porter_t *porter,
                     uint8_t max_data_length,
-                    void (*send_callback)(uint8_t *data, uint8_t data_length),
-                    void (*recv_callback)(uint8_t *data, uint8_t data_length),
+                    void (*send_callback)(const uint8_t *data, const uint8_t data_length),
+                    void (*recv_callback)(const uint8_t *data, const uint8_t data_length),
                     porter_time_t timeout_ms);
 
 uint8_t porter_deinit(porter_t *porter);
 
+uint8_t porter_send(porter_t *porter, const uint8_t *data, const uint8_t data_length);
+uint8_t porter_process(porter_t *porter, const uint8_t *received_data, const uint8_t received_data_length, porter_time_t current_time);
+
 uint8_t porter_is_tx_free(porter_t *porter);
 uint8_t porter_set_tx_free_callback(porter_t *porter, void (*tx_free_callback)());
-
-uint8_t porter_send(porter_t *porter, uint8_t *data, uint8_t data_length);
-uint8_t porter_process(porter_t *porter, uint8_t *received_data, uint8_t received_data_length, porter_time_t current_time);
-
 
 #endif // PORTER_H

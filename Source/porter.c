@@ -2,8 +2,8 @@
 
 uint8_t porter_init(porter_t *porter,
                     uint8_t max_data_length,
-                    void (*send_callback)(uint8_t *, uint8_t),
-                    void (*recv_callback)(uint8_t *, uint8_t),
+                    void (*send_callback)(const uint8_t *data, const uint8_t data_length),
+                    void (*recv_callback)(const uint8_t *data, const uint8_t data_length),
                     porter_time_t timeout_ms)
 {
     if (porter == NULL)
@@ -34,7 +34,7 @@ uint8_t porter_deinit(porter_t *porter)
     return PORTER_OK;
 }
 
-uint8_t porter_send(porter_t *porter, uint8_t *data, uint8_t data_length)
+uint8_t porter_send(porter_t *porter, const uint8_t *data, const uint8_t data_length)
 {
     if (porter == NULL)
         return PORTER_ERROR;
@@ -52,11 +52,10 @@ uint8_t porter_send(porter_t *porter, uint8_t *data, uint8_t data_length)
     porter->tx_buff[0] = PORTER_DATA_PACK_ID;
     porter->current_tx_data_length = data_length + 1;
     memcpy((porter->tx_buff + 1), data, data_length);
-
     return PORTER_OK;
 }
 
-uint8_t porter_process(porter_t *porter, uint8_t *received_data, uint8_t received_data_length, porter_time_t current_time)
+uint8_t porter_process(porter_t *porter, const uint8_t *received_data, const uint8_t received_data_length, porter_time_t current_time)
 {
     if (porter == NULL)
         return PORTER_ERROR;
