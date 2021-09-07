@@ -114,14 +114,5 @@ uint8_t porter_process(porter_t *porter, const uint8_t *received_data, const uin
 uint8_t porter_is_tx_free(porter_t *porter)
 ```
 
-```c
-/*!
- * \brief porter_set_tx_free_callback
- * \param porter - address of sheller descriptor
- * \return status of set callback
- */
-uint8_t porter_set_tx_free_callback(porter_t *porter, void (*tx_free_callback)())
-```
-
 ## Tests
 You can run the tests for Porter to make sure it works: [BaseTest_Porter](https://github.com/VNovytskyi/BaseTest_Porter)
