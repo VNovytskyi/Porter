@@ -3,121 +3,96 @@
 /*!
  * \brief porter_init Set initial values
  * \param porter - address of sheller descriptor
- * \param max_data_length - maximum length of transmitted data
- * \param send_callback - function that is called when a message is sent
- * \param recv_callback - function that is called when a message is received
  * \param timeout_ms - time for which acknowledgement should come
  * \return result of init porter
  */
-uint8_t porter_init(porter_t *porter,
-                    uint8_t max_data_length,
-                    void (*send_callback)(const uint8_t *data, const uint8_t data_length),
-                    void (*recv_callback)(const uint8_t *data, const uint8_t data_length),
-                    porter_time_t timeout_ms)
+uint8_t porter_init(porter_t *porter, porter_time_t timeout_ms)
 {
     if (porter == NULL)
         return PORTER_ERROR;
 
-    porter->tx_buff_max_length = (max_data_length + 1);
-    porter->tx_buff = (uint8_t*)malloc(porter->tx_buff_max_length * sizeof(uint8_t));
-    if (porter->tx_buff == NULL) {
-        return PORTER_ERROR;
-    }
+    porter->tx_pack.data = NULL;
+    porter->tx_pack.length = 0;
+
+    porter->rx_pack.data = NULL;
+    porter->rx_pack.length = 0;
+
+    porter->ack[0] = PORTER_ACK_PACK_ID;
+    porter->ack_pack.data = porter->ack;
+    porter->ack_pack.length = 1;
 
     porter->tx_status = PORTER_TX_FREE;
     porter->timeout_ms = timeout_ms;
-    porter->send_callback = send_callback;
-    porter->recv_callback = recv_callback;
 
-    porter->ack[0] = PORTER_ACK_PACK_ID;
-
-    return PORTER_OK;
-}
-
-/*!
- * \brief porter_deinit Free memory
- * \param porter - address of sheller descriptor
- * \return
- */
-uint8_t porter_deinit(porter_t *porter)
-{
-    if (porter == NULL)
-        return PORTER_ERROR;
-
-    free(porter->tx_buff);
     return PORTER_OK;
 }
 
 /*!
  * \brief porter_send Push data to an internal buffer to send later
- * \param porter - address of sheller descriptor
+ * \param porter - address of porter descriptor
+ * \param package_buff - address of buffer for porter package
  * \param data - pointer to user data which need to send
  * \param data_length - length of user data
  * \return result of pushing data to an internal buffer
  */
-uint8_t porter_send(porter_t *porter, const uint8_t *data, const uint8_t data_length)
+uint8_t porter_send(porter_t *porter, uint8_t *package_buff, const uint8_t *data, const uint8_t data_length)
 {
-    if (porter == NULL)
+    if (porter == NULL || data == NULL || package_buff == NULL)
         return PORTER_ERROR;
 
     if (porter->tx_status == PORTER_TX_BUSY)
         return PORTER_ERROR;
 
-    if (data == NULL)
-        return PORTER_ERROR;
-
-    if (data_length > (porter->tx_buff_max_length - 1))
-        return PORTER_ERROR;
-
     porter->tx_status = PORTER_TX_BUSY;
-    porter->tx_buff[0] = PORTER_DATA_PACK_ID;
-    porter->current_tx_data_length = data_length + 1;
-    memcpy((porter->tx_buff + 1), data, data_length);
+    porter->tx_pack.data = package_buff;
+    porter->tx_pack.length = data_length + 1;
+    package_buff[0] = PORTER_DATA_PACK_ID;
+    memcpy((package_buff + 1), data, data_length);
     return PORTER_OK;
 }
 
-/*!
- * \brief porter_process Proceed work of Porter
- * \param porter - address of sheller descriptor
- * \param received_data - pointer on received data
- * \param received_data_length - length of received data
- * \param current_time - current system time in ms
- * \return result of proceed work
- * \details this function call callbacks: tx_free_callback, send_callback, recv_callback
- */
-uint8_t porter_process(porter_t *porter, const uint8_t *received_data, const uint8_t received_data_length, porter_time_t current_time)
+porter_frame_t porter_process(porter_t *porter, uint8_t *received_data, uint8_t received_data_length, porter_time_t current_time)
 {
-    if (porter == NULL)
-        return PORTER_ERROR;
+    porter_frame_t frame = {NULL, 0};
 
-    //Handle RX
-    if ((received_data != NULL) && (received_data_length > 0)) {
-        if (received_data[0] == PORTER_ACK_PACK_ID) {
-            porter->tx_status = PORTER_TX_FREE;
-            if (porter->tx_free_callback != NULL) { // написать макрос
-                porter->tx_free_callback();
-            }
-        } else if (received_data[1] == PORTER_DATA_PACK_ID) {
-            if (porter->send_callback != NULL) {// написать макрос
-                porter->send_callback(porter->ack, 1);
-            }
-            if (porter->recv_callback != NULL) {// написать макрос
-                porter->recv_callback((received_data + 1), (received_data_length - 1));
-            }
-        }
-    }
+    if(porter == NULL)
+        return frame;
 
     //Handle TX
     if (porter->tx_status == PORTER_TX_BUSY) {
         if ((current_time - porter->send_time) >= porter->timeout_ms) {
             porter->send_time = current_time;
-            if (porter->send_callback != NULL) {// написать макрос
-                porter->send_callback(porter->tx_buff, porter->current_tx_data_length);
-            }
+            return porter->tx_pack;
         }
     }
 
-    return PORTER_OK;
+    //Handle RX
+    if ((received_data != NULL) && (received_data_length > 0)) {
+        if (received_data[0] == PORTER_ACK_PACK_ID) {
+            porter->tx_status = PORTER_TX_FREE;
+        } else if (received_data[0] == PORTER_DATA_PACK_ID) {
+            porter->rx_pack.data = received_data + 1;
+            porter->rx_pack.length = received_data_length - 1;
+            return porter->ack_pack;
+        }
+
+    }
+
+    return frame;
+}
+
+porter_frame_t porter_get_data(porter_t *porter)
+{
+    porter_frame_t frame = {NULL, 0};
+
+    if ((porter != NULL) && (porter->rx_pack.data != NULL)) {
+        frame.data = porter->rx_pack.data;
+        frame.length = porter->rx_pack.length;
+        porter->rx_pack.data = NULL;
+        porter->rx_pack.length = 0;
+    }
+
+    return frame;
 }
 
 /*!
@@ -132,18 +107,4 @@ uint8_t porter_is_tx_free(porter_t *porter)
         return PORTER_ERROR;
 
     return porter->tx_status;
-}
-
-/*!
- * \brief porter_set_tx_free_callback
- * \param porter - address of sheller descriptor
- * \return status of set callback
- */
-uint8_t porter_set_tx_free_callback(porter_t *porter, void (*tx_free_callback)())
-{
-    if (porter == NULL)
-        return PORTER_ERROR;
-
-    porter->tx_free_callback = tx_free_callback;
-    return PORTER_OK;
 }
