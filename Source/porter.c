@@ -1,5 +1,13 @@
 #include "porter.h"
 
+static void increase_circular_value(uint8_t *value, const uint8_t amount, const uint8_t max_value)
+{
+    uint16_t i;
+    for (i = 0; i < amount; ++i) {
+        *value = (*value + 1) % max_value;
+    }
+}
+
 /*!
  * \brief porter_init Set initial values
  * \param porter - address of sheller descriptor
@@ -17,11 +25,12 @@ uint8_t porter_init(porter_t *porter, porter_time_t timeout_ms)
     porter->rx_pack.data = NULL;
     porter->rx_pack.length = 0;
 
-    porter->ack[0] = PORTER_ACK_PACK_ID;
-    porter->ack_pack.data = porter->ack;
+    porter->service[0] = PORTER_ACK_PACK_ID;
+    porter->ack_pack.data = porter->service;
     porter->ack_pack.length = 1;
 
-    porter->tx_status = PORTER_TX_FREE;
+    porter->first_send = false;
+    porter->send_time = 0;
     porter->timeout_ms = timeout_ms;
 
     return PORTER_OK;
@@ -40,14 +49,16 @@ uint8_t porter_send(porter_t *porter, uint8_t *package_buff, const uint8_t *data
     if (porter == NULL || data == NULL || package_buff == NULL)
         return PORTER_ERROR;
 
-    if (porter->tx_status == PORTER_TX_BUSY)
+    if (porter->tx_pack.data != NULL) //Предыдущие данные еще не отправлены
         return PORTER_ERROR;
 
-    porter->tx_status = PORTER_TX_BUSY;
+    porter->first_send = true;
     porter->tx_pack.data = package_buff;
-    porter->tx_pack.length = data_length + 1;
+    porter->tx_pack.length = data_length + PORTER_SERVICE_BYTES_COUNT;
     package_buff[0] = PORTER_DATA_PACK_ID;
-    memcpy((package_buff + 1), data, data_length);
+    package_buff[1] = porter->tx_pack_id;
+    increase_circular_value(&porter->tx_pack_id, 1, PORTER_MAX_ID);
+    memcpy((package_buff + PORTER_SERVICE_BYTES_COUNT), data, data_length);
     return PORTER_OK;
 }
 
@@ -59,8 +70,9 @@ porter_frame_t porter_process(porter_t *porter, uint8_t *received_data, uint8_t 
         return frame;
 
     //Handle TX
-    if (porter->tx_status == PORTER_TX_BUSY) {
-        if ((current_time - porter->send_time) >= porter->timeout_ms) {
+    if (porter->tx_pack.data != NULL) {
+        if ((current_time - porter->send_time) >= porter->timeout_ms || porter->first_send) {
+            porter->first_send = false;
             porter->send_time = current_time;
             return porter->tx_pack;
         }
@@ -68,14 +80,26 @@ porter_frame_t porter_process(porter_t *porter, uint8_t *received_data, uint8_t 
 
     //Handle RX
     if ((received_data != NULL) && (received_data_length > 0)) {
-        if (received_data[0] == PORTER_ACK_PACK_ID) {
-            porter->tx_status = PORTER_TX_FREE;
-        } else if (received_data[0] == PORTER_DATA_PACK_ID) {
-            porter->rx_pack.data = received_data + 1;
-            porter->rx_pack.length = received_data_length - 1;
+        if (received_data[0] == PORTER_ACK_PACK_ID) { //recv ack on data
+            porter->tx_pack.data = NULL;
+            porter->tx_pack.length = 0;
+        } else if (received_data[0] == PORTER_DATA_PACK_ID) { //recv data
+            if (received_data[1] == porter->rx_pack_id) {
+                increase_circular_value(&porter->rx_pack_id, 1, PORTER_MAX_ID);
+                porter->rx_pack.data = received_data + PORTER_SERVICE_BYTES_COUNT;
+                porter->rx_pack.length = received_data_length - PORTER_SERVICE_BYTES_COUNT;
+                porter->ack_pack.data[0] = PORTER_ACK_PACK_ID;
+                return porter->ack_pack;
+            }
+        } else if (received_data[0] == PORTER_SYNC_PACK_ID) { //recv sync cmd
+            porter->tx_pack_id = 0;
+            porter->rx_pack_id = 0;
+            porter->ack_pack.data[0] = PORTER_ACK_SYNC_PACK_ID;
             return porter->ack_pack;
+        } else if (received_data[0] == PORTER_ACK_SYNC_PACK_ID) {//recv ask on sync
+            porter->tx_pack_id = 0;
+            porter->rx_pack_id = 0;
         }
-
     }
 
     return frame;
@@ -101,10 +125,11 @@ porter_frame_t porter_get_data(porter_t *porter)
  * \return tx buffer status
  * \details compare the return value with PORTER_TX_BUSY or PORTER_TX_FREE
  */
-uint8_t porter_is_tx_free(porter_t *porter)
+bool porter_is_tx_free(porter_t *porter)
 {
-    if (porter == NULL)
-        return PORTER_ERROR;
+    if (porter != NULL && porter->tx_pack.data == NULL) {
+        return true;
+    }
 
-    return porter->tx_status;
+    return false;
 }
