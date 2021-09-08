@@ -8,6 +8,38 @@ static void increase_circular_value(uint8_t *value, const uint8_t amount, const 
     }
 }
 
+static porter_frame_t handle_sync(porter_t *porter)
+{
+    porter->tx_pack_id = 0;
+    porter->rx_pack_id = 0;
+
+    porter->tx_pack.data = NULL;
+    porter->tx_pack.length = 0;
+
+    porter->rx_pack.data = NULL;
+    porter->rx_pack.length = 0;
+
+    porter->system_pack.data[0] = PORTER_ACK_SYNC_PACK_ID;
+    porter->system_pack.length = 1;
+    return porter->system_pack;
+}
+
+static porter_frame_t handle_received_data(porter_t *porter, uint8_t *received_data, uint8_t received_data_length)
+{
+    porter_frame_t frame = {NULL, 0};
+
+    if (received_data[1] == porter->rx_pack_id) {
+        increase_circular_value(&porter->rx_pack_id, 1, PORTER_MAX_ID);
+        porter->rx_pack.data = received_data + PORTER_SERVICE_BYTES_COUNT;
+        porter->rx_pack.length = received_data_length - PORTER_SERVICE_BYTES_COUNT;
+        porter->system_pack.data[0] = PORTER_ACK_PACK_ID;
+        porter->system_pack.length = 1;
+        return porter->system_pack;
+    }
+
+    return frame;
+}
+
 /*!
  * \brief porter_init Set initial values
  * \param porter - address of sheller descriptor
@@ -19,15 +51,16 @@ uint8_t porter_init(porter_t *porter, porter_time_t timeout_ms)
     if (porter == NULL)
         return PORTER_ERROR;
 
+    porter->system_pack.data = porter->service;
+    porter->system_pack.length = 1;
+
+    porter->tx_pack_id = 0;
     porter->tx_pack.data = NULL;
     porter->tx_pack.length = 0;
 
+    porter->rx_pack_id = 0;
     porter->rx_pack.data = NULL;
     porter->rx_pack.length = 0;
-
-    porter->service[0] = PORTER_ACK_PACK_ID;
-    porter->ack_pack.data = porter->service;
-    porter->ack_pack.length = 1;
 
     porter->first_send = false;
     porter->send_time = 0;
@@ -49,17 +82,19 @@ uint8_t porter_send(porter_t *porter, uint8_t *package_buff, const uint8_t *data
     if (porter == NULL || data == NULL || package_buff == NULL)
         return PORTER_ERROR;
 
-    if (porter->tx_pack.data != NULL) //Предыдущие данные еще не отправлены
-        return PORTER_ERROR;
+    if (porter->tx_pack.data == NULL) {
+        porter->first_send = true;
+        porter->tx_pack.data = package_buff;
+        porter->tx_pack.length = data_length + PORTER_SERVICE_BYTES_COUNT;
+        package_buff[0] = PORTER_DATA_PACK_ID;
+        package_buff[1] = porter->tx_pack_id;
+        increase_circular_value(&porter->tx_pack_id, 1, PORTER_MAX_ID);
+        memcpy((package_buff + PORTER_SERVICE_BYTES_COUNT), data, data_length);
+        return PORTER_OK;
 
-    porter->first_send = true;
-    porter->tx_pack.data = package_buff;
-    porter->tx_pack.length = data_length + PORTER_SERVICE_BYTES_COUNT;
-    package_buff[0] = PORTER_DATA_PACK_ID;
-    package_buff[1] = porter->tx_pack_id;
-    increase_circular_value(&porter->tx_pack_id, 1, PORTER_MAX_ID);
-    memcpy((package_buff + PORTER_SERVICE_BYTES_COUNT), data, data_length);
-    return PORTER_OK;
+    }
+
+    return PORTER_ERROR;
 }
 
 porter_frame_t porter_process(porter_t *porter, uint8_t *received_data, uint8_t received_data_length, porter_time_t current_time)
@@ -84,21 +119,11 @@ porter_frame_t porter_process(porter_t *porter, uint8_t *received_data, uint8_t 
             porter->tx_pack.data = NULL;
             porter->tx_pack.length = 0;
         } else if (received_data[0] == PORTER_DATA_PACK_ID) { //recv data
-            if (received_data[1] == porter->rx_pack_id) {
-                increase_circular_value(&porter->rx_pack_id, 1, PORTER_MAX_ID);
-                porter->rx_pack.data = received_data + PORTER_SERVICE_BYTES_COUNT;
-                porter->rx_pack.length = received_data_length - PORTER_SERVICE_BYTES_COUNT;
-                porter->ack_pack.data[0] = PORTER_ACK_PACK_ID;
-                return porter->ack_pack;
-            }
+            return handle_received_data(porter, received_data, received_data_length);
         } else if (received_data[0] == PORTER_SYNC_PACK_ID) { //recv sync cmd
-            porter->tx_pack_id = 0;
-            porter->rx_pack_id = 0;
-            porter->ack_pack.data[0] = PORTER_ACK_SYNC_PACK_ID;
-            return porter->ack_pack;
+            return handle_sync(porter);
         } else if (received_data[0] == PORTER_ACK_SYNC_PACK_ID) {//recv ask on sync
-            porter->tx_pack_id = 0;
-            porter->rx_pack_id = 0;
+            handle_sync(porter);
         }
     }
 
@@ -119,17 +144,24 @@ porter_frame_t porter_get_data(porter_t *porter)
     return frame;
 }
 
-/*!
- * \brief porter_is_tx_free
- * \param porter - address of sheller descriptor
- * \return tx buffer status
- * \details compare the return value with PORTER_TX_BUSY or PORTER_TX_FREE
- */
-bool porter_is_tx_free(porter_t *porter)
+uint8_t porter_get_tx_status(porter_t *porter)
 {
-    if (porter != NULL && porter->tx_pack.data == NULL) {
-        return true;
+    if (porter == NULL) {
+        return PORTER_ERROR;
     }
 
-    return false;
+    if (porter->tx_pack.data == NULL) {
+        return PORTER_TX_FREE;
+    }
+
+    return PORTER_TX_BUSY;
+}
+
+uint8_t porter_sync(porter_t *porter)
+{
+    porter->system_pack.data[0] = PORTER_SYNC_PACK_ID;
+    porter->system_pack.length = 1;
+    porter->tx_pack = porter->system_pack;
+    porter->first_send = true;
+    return 0;
 }
